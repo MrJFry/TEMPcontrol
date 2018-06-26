@@ -1,10 +1,9 @@
 /*
 Wiring:
-(3,3V) ---- (10k-Resistor) -------|------- (Thermistor) ---- (GND)
+(3,3V) ---- (100k-Resistor) -------|------- (Thermistor) ---- (GND)
                                   |          NTC 3950
                               Analog Pin 0
 Connect AREF to 3,3V
-
 Output PIN 8 to MOSFET- Driver
 onboard LED as indicator
 */
@@ -16,9 +15,11 @@ onboard LED as indicator
 #define TEMPERATURENOMINAL 25         // temp. for nominal resistance (almost always 25 C)
 #define NUMSAMPLES 10                 // how many samples to take and average, more takes longer
 #define BCOEFFICIENT 3950             // The beta coefficient of the thermistor (usually 3000-4000)
-#define SERIESRESISTOR 10000          // the value of the 'other' resistor
-#define SETTEMP 70                    // Temperature in *C of the hotbed
-#define HYSTERESIS 3                  // Hysteresis
+#define SERIESRESISTOR 100000         // the value of the 'other' resistor
+//#define SETTEMP 60                    // Temperature in *C of the hotbed
+#define HYSTERESIS 1                  // Hysteresis
+#define TEMPUP 3                      // Temperature UP key
+#define TEMPDOWN 2                    // Temperature DOWN key
 
 /*include Libraries and stuff for LCD*******************************************/
 #include <SPI.h>
@@ -36,16 +37,21 @@ Adafruit_SSD1306 display(OLED_RESET);
 /*******************************************************************************/
 int samples[NUMSAMPLES];
 int tempvalue = 0;
+int SETTEMP = 60;
+int active = 0;
 
 /***************************SETUP***********************************************/ 
 void setup(void) {
   Serial.begin(9600);
   initDisplay();
   analogReference(EXTERNAL);
+  pinMode(TEMPUP, INPUT);
+  pinMode(TEMPDOWN, INPUT);
 }
 /***************************LOOP************************************************/ 
 void loop(void) {
   measureTemp();
+  sensekey();
 //  delay(1000);
   
   if (tempvalue < 5) {
@@ -58,6 +64,7 @@ void loop(void) {
   else if(tempvalue > (SETTEMP + HYSTERESIS)) {
     digitalWrite(HOTBED, LOW);
     digitalWrite(LED, LOW);
+    active = 0;
     Serial.print("Heizung aus!!!!!!!!!!!");
     mainFrame();
   }
@@ -65,6 +72,7 @@ void loop(void) {
   else if(tempvalue < (SETTEMP - HYSTERESIS)) {
     digitalWrite(HOTBED, HIGH);
     digitalWrite(LED, HIGH);
+    active = 1;
     Serial.print("Heizung an!!!!!!!!!!!!");
     mainFrame();
   }
@@ -90,14 +98,14 @@ void measureTemp(void) {
   }
   average /= NUMSAMPLES;
  
-  //Serial.print("Average analog reading "); 
-  //Serial.println(average);
+//  Serial.print("Average analog reading "); 
+//  Serial.println(average);
  
   // convert the value to resistance
   average = 1023 / average - 1;
   average = SERIESRESISTOR / average;
-  //Serial.print("Thermistor resistance "); 
-  //Serial.println(average);
+//  Serial.print("Thermistor resistance "); 
+//  Serial.println(average);
  
   float tempInC;
   tempInC = average / THERMISTORNOMINAL;     // (R/Ro)
@@ -128,48 +136,34 @@ void initDisplay(void) {
   dispSet(30, 23, WHITE, 2);
   display.println("control");
   dispSet(0, 56, WHITE, 1);
-  display.println("V1.2 - universal PID");
+  display.println("V2.1 - universal PID");
   display.display();
-  delay(1500);
+  delay(1000);
   display.clearDisplay();
 }
 
 void mainFrame(void) {
+  display.clearDisplay();
   dispSet(0, 0, WHITE, 2);
-  display.println("random    Speed");
+  display.println("Heizbett:");
+  dispSet(110, 0, WHITE, 2);
+  display.println(active);
   dispSet(0, 35, WHITE, 1);
-  display.println("Temperatur:");
+  display.println("Ist:");
   dispSet(36, 56, WHITE, 1);
   display.println("*C");
-  dispSet(64, 35, WHITE, 1);
-  display.println("for:");
+  dispSet(75, 35, WHITE, 1);
+  display.println("Soll:");
   dispSet(110, 56, WHITE, 1);
-  display.println("sec");
-    dispSet(0, 50, WHITE, 2);
+  display.println("*C");
+  dispSet(85, 50, WHITE, 2);
+  display.println(SETTEMP);
+  dispSet(0, 50, WHITE, 2);
   display.println(tempvalue);
   display.display();  
+  
 }
-/*
-void sensorFrame(void) {
-  display.clearDisplay();
-  dispSet(50, 5, WHITE, 3);
-  display.println("no");
-  dispSet(0, 25, WHITE, 3);
-  display.println("Sensor!");
-  dispSet(0, 55, WHITE, 1);
-  display.println("Connect a Sensor!");
-  display.display();
-  delay(500);
-  display.clearDisplay();
-  dispSet(50, 5, WHITE, 3);
-  display.println("no");
-  dispSet(0, 25, WHITE, 3);
-  display.println("Sensor!");
-  dispSet(0, 55, WHITE, 1);
-  display.println("Connect a Sensor!");
-  display.display();
-  delay(500);
-}*/
+
 
 void sensorFrame(void) {
   display.clearDisplay();
@@ -191,4 +185,46 @@ void sensorFrame(void) {
   display.display();
   delay(500);
 
+}
+
+void sensekey(void){
+  Serial.println("Taster?????????");
+  if((digitalRead(TEMPUP) == HIGH) && (digitalRead(TEMPDOWN) == LOW)) {
+    delay(10);
+    if(digitalRead(TEMPUP) == HIGH){
+      Serial.println("HOCH");
+      SETTEMP = SETTEMP +1;
+      Serial.println(SETTEMP);
+    }
+  }
+  if((digitalRead(TEMPDOWN) == HIGH) && (digitalRead(TEMPUP) == LOW)){
+    delay(10);
+    if(digitalRead(TEMPDOWN) == HIGH){
+      Serial.println("RUNTER");
+      SETTEMP = SETTEMP -1;
+      Serial.println(SETTEMP);
+    }
+  }
+  if((digitalRead(TEMPDOWN) == LOW) && (digitalRead(TEMPUP) == LOW)){
+    delay(10);
+    while((digitalRead(TEMPDOWN) == LOW) && (digitalRead(TEMPUP) == LOW)){
+    easteregg();
+    }
+  }
+}
+
+void easteregg(void) {
+  
+  display.clearDisplay();
+  dispSet(0, 0, WHITE, 2);
+  display.println("HAHA :D");
+  dispSet(0, 23, WHITE, 1);
+  display.println("Du hast die geheime");
+  dispSet(10, 36, WHITE, 2);
+  display.println("8===D~~");
+  dispSet(0, 56, WHITE, 1);
+  display.println("Nachricht entdeckt!");
+  display.display();
+  delay(1500);
+  display.clearDisplay();
 }
